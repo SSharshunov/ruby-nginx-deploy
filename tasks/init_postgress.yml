@@ -1,0 +1,59 @@
+---
+
+- file:
+    path: "{{ postgresql_databases_dir }}"
+    state: directory
+    owner: "{{ postgresql_admin_user }}"
+    group: "{{ postgresql_admin_user }}"
+    mode: 0700
+  when: postgresql_databases_dir|length > 0
+
+- name: "Initialize new postgresql cluster"
+  command: "su -c 'initdb -D {{ postgresql_databases_dir }} --auth-local=md5' - {{ postgresql_admin_user }}"
+
+- name: "Stage 2: configure pg_hba.conf"
+  template:
+    src: pg_hba.conf.j2
+    dest: "{{ postgresql_databases_dir }}/pg_hba.conf"
+    owner: "{{ postgresql_admin_user }}"
+    group: "{{ postgresql_admin_user }}"
+    mode: 0640
+
+- name: Restart postgresql
+  service:
+    name: 'postgresql'
+    state: 'restarted'
+
+# - lineinfile:
+#     path: "{{ postgresql_databases_dir }}/pg_hba.conf"
+#     line: 'local         all        all        peer'
+#   notify:
+#     - restart postgresql
+
+# - name: "Start postgresql service"
+#   service: name="postgresql" state=started enabled=yes
+
+- name: "Add postgresql roles"
+  postgresql_user:
+    state: present
+    name: "{{ item.name }}"
+    encrypted: no
+    password: "{{ item.passwd }}"
+    role_attr_flags: "{{ item.flags }}"
+  with_items: "{{ postgresql_users }}"
+  when: postgresql_users|length > 0
+
+- name: "Add databases"
+  postgresql_db:
+    state: present
+    name: "{{ item.name }}"
+    template: "{{ item.template }}"
+    encoding: "{{ item.encoding }}"
+    lc_collate: "{{ item.collate }}"
+    lc_ctype: "{{ item.ctype }}"
+    owner: "{{ item.owner }}"
+  with_items: "{{ postgresql_databases }}"
+  when: postgresql_databases|length > 0
+
+
+

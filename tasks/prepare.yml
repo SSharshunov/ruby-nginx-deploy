@@ -1,0 +1,109 @@
+---
+
+- name: Include Default variables.
+  include_vars: "../defaults/main.yml"
+
+- name: Include other variables.
+  include_vars: "../vars/main.yml"
+
+# Disable SELinux
+- selinux:
+    state: disabled
+
+# - name: Change settings for SSHD
+#   lineinfile:
+#     dest: /etc/ssh/sshd_config
+#     state: present
+#     regexp: '^ClientAliveCountMax'
+#     line: 'ClientAliveCountMax 360'
+
+# - name: Change settings for SSHD
+#   lineinfile:
+#     dest: /etc/ssh/sshd_config
+#     state: present
+#     regexp: '^ClientAliveInterval'
+#     line: 'ClientAliveInterval 60'
+#   notify:
+#     - restart sshd
+
+# #  Установка пакетов необходимых для RVM
+# - name: ensure necessary packages are installed
+#   yum:
+#     name: "{{ item }}"
+#     state: present
+#   with_items:
+#     - curl
+#     - gnupg2
+#     - nano
+#     - postgresql
+#     - postgresql-server
+#     - postgresql-libs
+#     - python-psycopg2
+#     - postgresql-devel
+#     - git
+#     - epel-release
+
+# # #  Установка необходимых пакетов
+# - name: ensure necessary packages are installed
+#   yum:
+#     name: "{{ item }}"
+#     state: present
+#   with_items:
+#     - nodejs
+
+# Add the group and user 'deployer'
+- name: Make sure we have a 'deployer' group
+  group:
+    name: deployer
+    state: present
+
+- name: Make sure we have a 'wheel' group
+  group:
+    name: wheel
+    state: present
+
+- name: Allow 'wheel' group to have passwordless sudo
+  lineinfile:
+    dest: /etc/sudoers
+    state: present
+    regexp: '^%wheel'
+    line: '%wheel ALL=(ALL) NOPASSWD: ALL'
+
+- name: create a new user
+  user:
+    name: '{{ user }}'
+    group: '{{ user }}'
+    groups: "wheel"
+    state: present
+    password: "{{deployer_user_password}}"
+    createhome: yes
+
+- name: Set up authorized keys for the deployer user
+  authorized_key: user=deployer key="{{item}}"
+  with_file:
+    - ~/.ssh/id_rsa.pub
+
+- name: Adding existing user '{{ user }}' to group sudo
+  user: name='{{ user }}'
+        groups=rvm
+        append=yes
+
+# - name: checking that RVM is installed
+#   stat:
+#     path: "{{rvm_binary_path}}"
+#   ignore_errors: True
+#   register: rvm_install_result
+
+# - name: Include task install_rvm.
+#   include_tasks: install_rvm.yml
+#   when: rvm_install_result.stat.exists != true
+
+# - name: Include task update_rvm.
+#   include_tasks: update_rvm.yml
+#   when: rvm_install_result.stat.exists == true
+
+- name: Configure postgresql
+  include_tasks: postgresql.yml
+
+# - name: Install nginx
+#   include_tasks: nginx.yml

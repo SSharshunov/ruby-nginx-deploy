@@ -1,0 +1,20 @@
+---
+
+# - debug: var="{{ item.passwd }}"
+#   with_items: "{{ postgresql_users }}"
+
+- name: Check for pgdata directory
+  stat: path={{ postgresql_databases_dir }}
+  register: pgdata_stat
+  failed_when: false
+
+- name: Initialize postgres
+  include_tasks: init_postgress.yml
+  when: pgdata_stat.stat.isdir is not defined or not pgdata_stat.stat.isdir
+
+
+
+
+
+
+

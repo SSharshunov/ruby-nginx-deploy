@@ -1,0 +1,133 @@
+---
+
+rvm_binary_path: '{{ rvm_install_path }}/bin/rvm'
+deployer_user_password: 'q^$w#B;F_t&<4YQ'
+
+# Версия ruby
+ruby_version:
+  - 'ruby-2.4.1'
+
+rvm_default_ruby_version: '{{ ruby_version | last if ruby_version and ruby_version is iterable else ruby_version }}'
+rvm_symlink_binaries:
+  - 'erb'
+  - 'executable-hooks-uninstaller'
+  - 'gem'
+  - 'irb'
+  - 'rake'
+  - 'rdoc'
+  - 'ri'
+  - 'ruby'
+
+rvm_symlink_bundler_binaries:
+  - 'bundle'
+  - 'bundler'
+
+rvm_install_flags: '--auto-dotfiles --user-install'
+rvm_symlink_to: '/usr/local/bin'
+#full_ruby_version: 'ruby-{{ ruby_version }}'
+
+# Install bundler
+rvm_bundler_install: True
+
+# PostgreSQL databases and settings. Do not remove template, encoding, collate, ctype options from postgresql_database because it most certainly lead to Ansible role inoperability.
+postgresql_encoding: UTF8
+postgresql_locale: en_US.UTF-8
+
+# PostgreSQL users and roles
+postgresql_admin_user: "postgres"
+postgresql_users:
+ - { name: "deployer", passwd: "G9NXzSj_X_RMN5^", flags: "LOGIN,SUPERUSER" }
+# - { name: "{{ app_name }}", passwd: "n5VeMMCVDWHr6C5j", flags: "LOGIN,SUPERUSER" }
+
+postgresql_databases:
+ - { name: "{{ app_name }}_production", owner: "deployer", template: "template0", encoding: "{{ postgresql_encoding }}", collate: "{{ postgresql_locale }}", ctype: "{{ postgresql_locale }}" }
+
+postgresql_databases_dir: /var/lib/pgsql/data
+
+# Settings related to the pg_hba rules
+postgresql_default_unix_auth_method: "trust"
+postgresql_default_ipv4_auth_method: "md5"
+postgresql_default_ipv6_auth_method: "md5"
+
+# Specify default rules for pg_hba.conf. Change them only if it is really necessary.
+postgresql_pg_hba_default:
+ - { type: local, database: all, role: "{{ postgresql_admin_user }}", address: "", method: "{{ postgresql_default_unix_auth_method }}", comment: '"local" is for Unix domain socket connections only' }
+ - { type: local, database: all, role: "{{ user }}", address: "", method: "{{ postgresql_default_unix_auth_method }}", comment: '"local" is for Unix domain socket connections only' }
+ - { type: local, database: all, role: "{{ app_name }}", address: "", method: "{{ postgresql_default_unix_auth_method }}", comment: '"local" is for Unix domain socket connections only' }
+ - { type: host, database: all, role: all, address: "127.0.0.1/32", method: "{{ postgresql_default_ipv4_auth_method }}", comment: 'IPv4 local connections:' }
+ - { type: host, database: all, role: all, address: "::1/128", method: "{{ postgresql_default_ipv6_auth_method }}", comment: 'IPv6 local connections:' }
+
+# Specify custom rules for pg_hba.conf. Specify here all necessary pg_hba rules.
+postgresql_pg_hba_custom:
+ - { type: host, database: replication, role: "{{ postgresql_admin_user }}", address: "127.0.0.1/32", method: "{{ postgresql_default_ipv4_auth_method }}", comment: '' }
+
+__nginx_user: "nginx"
+root_group: root
+nginx_conf_path: /etc/nginx/conf.d
+nginx_conf_file_path: /etc/nginx/nginx.conf
+nginx_mime_file_path: /etc/nginx/mime.types
+
+nginx_vhost_path: /etc/nginx/conf.d
+#nginx_default_vhost_path: /etc/nginx/conf.d/default.conf
+
+nginx_vhosts:
+  # Example vhost below, showing all available options:
+  - listen: "80" # default: "80"
+    server_name: "{{ app_site }}" # default: N/A
+    root: "{{ application }}/current/public" # default: N/A
+    # access_log: "{{ application }}/log/nginx.access.log"
+    # error_log: "{{ application }}/log/nginx.error.log"
+    error_page: "500 502 503 504 /500.html"
+    extra_parameters: |
+      location ^~ /assets/ {
+        gzip_static on;
+        expires max;
+        add_header Cache-Control public;
+      }
+
+      try_files $uri/index.html $uri @puma;
+      location @puma {
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Host $http_host;
+        proxy_redirect off;
+
+        proxy_pass http://puma;
+      }
+      client_max_body_size 10M;
+      keepalive_timeout 10;
+
+    index: "index.html index.htm" # default: "index.html index.htm"
+    filename: "{{ app_site }}.conf" # Can be used to set the filename of the vhost file.
+
+    # # Properties that are only added if defined:
+    # server_name_redirect: "www.example.com" # default: N/A
+    # error_page: ""
+    # access_log: ""
+    # error_log: ""
+    # extra_parameters: "" # Can be used to add extra config blocks (multiline).
+    # template: "" # Can be used to override the `nginx_vhost_template` per host.
+    # state: "absent" # To remove the vhost configuration.
+
+nginx_extra_conf_options: ""
+# Example extra main options, used within the main nginx's context:
+#   nginx_extra_conf_options: |
+#     env VARIABLE;
+#     include /etc/nginx/main.d/*.conf;
+nginx_extra_http_options: ""
+# Example extra http options, printed inside the main server http config:
+#    nginx_extra_http_options: |
+#      proxy_buffering    off;
+#      proxy_set_header   X-Real-IP $remote_addr;
+#      proxy_set_header   X-Scheme $scheme;
+#      proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+#      proxy_set_header   Host $http_host;
+nginx_upstreams:
+  - name: puma
+    # strategy: "ip_hash" # "least_conn", etc.
+    # keepalive: 16 # optional
+    servers: {
+      # "srv1.example.com",
+      # "srv2.example.com weight=3",
+      #"unix:///home/username/apps/appname/shared/tmp/sockets/appname-puma.sock"
+      "unix://{{ application }}/shared/tmp/sockets/{{ app_name }}-puma.sock"
+    }

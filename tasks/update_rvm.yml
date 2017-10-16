@@ -1,0 +1,5 @@
+---
+- include_tasks: ./receive_key.yml
+
+- name: updating RVM as root
+  shell: "source {{rvm_init_script}} && rvm get stable executable=/bin/bash"

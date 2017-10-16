@@ -1,0 +1,111 @@
+---
+
+- name: Include Default variables.
+  include_vars: "../defaults/main.yml"
+
+- name: Include other variables.
+  include_vars: "../vars/main.yml"
+
+- name: Change settings for SSHD
+  lineinfile:
+    dest: /etc/ssh/sshd_config
+    state: present
+    regexp: '^ClientAliveCountMax'
+    line: 'ClientAliveCountMax 360'
+
+- name: Change settings for SSHD
+  lineinfile:
+    dest: /etc/ssh/sshd_config
+    state: present
+    regexp: '^ClientAliveInterval'
+    line: 'ClientAliveInterval 60'
+  notify:
+    - restart sshd
+
+  # Установка пакетов необходимых для RVM
+- name: ensure necessary packages are installed
+  yum:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - curl
+    - gnupg2
+    - nano
+    - postgresql
+    - postgresql-server
+
+# Add the group and user 'deployer'
+- name: Make sure we have a 'deployer' group
+  group:
+    name: deployer
+    state: present
+
+- name: Make sure we have a 'wheel' group
+  group:
+    name: wheel
+    state: present
+
+- name: Allow 'wheel' group to have passwordless sudo
+  lineinfile:
+    dest: /etc/sudoers
+    state: present
+    regexp: '^%wheel'
+    line: '%wheel ALL=(ALL) NOPASSWD: ALL'
+
+- name: create a new user
+  user:
+    name: deployer
+    group: deployer
+    groups: "wheel"
+    state: present
+    password: "{{deployer_user_password}}"
+    createhome: yes
+
+- name: Set up authorized keys for the deployer user
+  authorized_key: user=deployer key="{{item}}"
+  with_file:
+    - ~/.ssh/id_rsa.pub
+
+#   # Получение ключа GPG
+# - name: ensure that GPG key for RVM is installed
+#   command: gpg2 --keyserver hkp://keys.gnupg.net --recv-keys D39DC0E3
+#   args:
+#     creates: /root/.gnupg/secring.gpg
+
+- name: checking that RVM is installed
+  stat:
+    path: "{{rvm_binary_path}}"
+  ignore_errors: True
+  register: rvm_install_result
+
+- name: Include task install_rvm.
+  include_tasks: install_rvm.yml
+  when: rvm_install_result.stat.exists != true
+
+- name: Include task update_rvm.
+  include_tasks: update_rvm.yml
+  when: rvm_install_result.stat.exists == true
+
+
+# - name: Install ruby
+#   include_tasks: install_ruby.yml
+#   # Установка RVM
+# - name: Install RVM
+#   shell: "curl -sSL https://get.rvm.io | bash"
+#   args:
+#     creates: /usr/local/rvm
+
+#   # Проверка зависимостей
+# - name: Check requirements
+#   shell: "rvm requirements"
+
+#   # Установка ruby
+# - name: ensure that ruby is installed
+#   command: "rvm install {{ ruby_version }}"
+#   args:
+#     creates: "/usr/local/rvm/gems/ruby-{{ ruby_version }}"
+#   environment:
+#     PATH: "{{ rvm_path }}:{{ ansible_env.PATH }}"
+
+- name: Configure postgresql
+  include_tasks: postgresql.yml

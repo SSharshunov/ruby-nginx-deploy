@@ -1,0 +1,29 @@
+---
+- include_tasks: ./receive_key.yml
+
+- name: downloading RVM installer
+  get_url:
+    url: "https://get.rvm.io"
+    dest: "{{rvm_installer}}"
+
+- name: set executable RVM installer
+  file:
+    path: "{{rvm_installer}}"
+    mode: 0755
+
+- name: installing RVM as root
+  command: "{{rvm_installer}} stable"
+
+- name: removing RVM installer
+  file:
+    path: "{{rvm_installer}}"
+    state: absent
+
+  # Проверка зависимостей
+- name: Check requirements
+  shell: "rvm requirements"
+
+- name: Adding existing user '{{ user }}' to group sudo
+  user: name='{{ user }}'
+        groups=rvm
+        append=yes
